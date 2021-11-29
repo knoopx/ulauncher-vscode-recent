@@ -2,7 +2,7 @@ import os
 import os.path
 import json
 import pathlib
-from types import prepare_class
+
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import (
@@ -12,12 +12,16 @@ from ulauncher.api.shared.event import (
 	PreferencesUpdateEvent,
 )
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
-from ulauncher.api.shared.item.ExtensionSmallResultItem import ExtensionSmallResultItem
 from ulauncher.api.shared.action.RenderResultListAction import RenderResultListAction
 from ulauncher.api.shared.action.HideWindowAction import HideWindowAction
 from ulauncher.api.shared.action.ExtensionCustomAction import ExtensionCustomAction
 from fuzzywuzzy import process, fuzz
 
+import mimetypes
+
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gio, Gtk
 
 class Utils:
 	@staticmethod
@@ -25,6 +29,21 @@ class Utils:
 		base_dir = pathlib.Path.home() if from_home else pathlib.Path(
 			__file__).parent.absolute()
 		return os.path.join(base_dir, filename)
+
+	@staticmethod
+	def get_icon(f, size = 128):
+		if os.path.isfile(f):
+			content_type, _ = mimetypes.guess_type(f)
+			if content_type:
+				file_icon = Gio.content_type_get_icon(content_type)
+				file_info = Gtk.IconTheme.get_default().choose_icon(file_icon.get_names(), size, 0)
+				if file_info:
+					return file_info.get_filename()
+		else:
+			file_info = Gtk.IconTheme.get_default().choose_icon(["folder"], size, 0)
+			if file_info:
+				return file_info.get_filename()
+
 
 
 class Code:
@@ -51,6 +70,7 @@ class Code:
 			recents.append({
 				"folder": folder,
 				"uri": uri,
+				"path": Gio.Vfs.get_default().get_file_for_uri(uri).get_path(), #unquote_plus(urlparse(uri).path),
 				"label": label
 			})
 		return recents
@@ -95,10 +115,10 @@ class CodeExtension(Extension):
 				data.append(recent)
 		for recent in data[:20]:
 			items.append(
-				ExtensionSmallResultItem(
-					icon=Utils.get_path(
-						f"images/{'folder' if recent['folder'] else 'file'}.svg"),
+				ExtensionResultItem(
+					icon=Utils.get_icon(recent["path"]),
 					name=recent["label"],
+					description=recent["path"],
 					on_enter=ExtensionCustomAction(recent),
 				)
 			)
